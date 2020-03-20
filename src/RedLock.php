@@ -1,37 +1,44 @@
 <?php
 
+namespace RedLock;
+
+use Redis;
+
+/**
+ * Forked from https://github.com/ronnylt/redlock-php
+ */
 class RedLock
 {
-    private $retryDelay;
-    private $retryCount;
-    private $clockDriftFactor = 0.01;
+    protected $retryDelay;
+    protected $retryCount;
+    protected $clockDriftFactor = 0.01;
 
-    private $quorum;
+    protected $quorum;
 
-    private $servers = array();
-    private $instances = array();
+    protected $servers   = [];
+    protected $instances = [];
 
-    function __construct(array $servers, $retryDelay = 200, $retryCount = 3)
+    public function __construct(array $servers, int $retryDelay = 200, int $retryCount = 3)
     {
         $this->servers = $servers;
 
         $this->retryDelay = $retryDelay;
         $this->retryCount = $retryCount;
 
-        $this->quorum  = min(count($servers), (count($servers) / 2 + 1));
+        $this->quorum = \min(\count($servers), (\count($servers) / 2 + 1));
     }
 
-    public function lock($resource, $ttl)
+    public function lock(string $resource, int $ttl)
     {
         $this->initInstances();
 
-        $token = uniqid();
+        $token = \uniqid();
         $retry = $this->retryCount;
 
         do {
             $n = 0;
 
-            $startTime = microtime(true) * 1000;
+            $startTime = \microtime(true) * 1000;
 
             foreach ($this->instances as $instance) {
                 if ($this->lockInstance($instance, $resource, $token, $ttl)) {
@@ -44,7 +51,7 @@ class RedLock
             # for small TTLs.
             $drift = ($ttl * $this->clockDriftFactor) + 2;
 
-            $validityTime = $ttl - (microtime(true) * 1000 - $startTime) - $drift;
+            $validityTime = $ttl - (\microtime(true) * 1000 - $startTime) - $drift;
 
             if ($n >= $this->quorum && $validityTime > 0) {
                 return [
@@ -60,8 +67,8 @@ class RedLock
             }
 
             // Wait a random delay before to retry
-            $delay = mt_rand(floor($this->retryDelay / 2), $this->retryDelay);
-            usleep($delay * 1000);
+            $delay = \mt_rand(\floor($this->retryDelay / 2), $this->retryDelay);
+            \usleep($delay * 1000);
 
             $retry--;
 
@@ -73,6 +80,7 @@ class RedLock
     public function unlock(array $lock)
     {
         $this->initInstances();
+
         $resource = $lock['resource'];
         $token    = $lock['token'];
 
@@ -81,25 +89,31 @@ class RedLock
         }
     }
 
-    private function initInstances()
+    protected function initInstances()
     {
-        if (empty($this->instances)) {
-            foreach ($this->servers as $server) {
-                list($host, $port, $timeout) = $server;
-                $redis = new \Redis();
-                $redis->connect($host, $port, $timeout);
+        if (!empty($this->instances)) {
+            return;
+        }
 
-                $this->instances[] = $redis;
+        foreach ($this->servers as $server) {
+            list($host, $port, $timeout) = $server;
+
+            $redis = new Redis;
+            $redis->connect($host, $port, $timeout);
+            if (isset($server[3])) {
+                $redis->select((int) $server[3]);
             }
+
+            $this->instances[] = $redis;
         }
     }
 
-    private function lockInstance($instance, $resource, $token, $ttl)
+    protected function lockInstance(Redis $instance, string $resource, string $token, int $ttl)
     {
         return $instance->set($resource, $token, ['NX', 'PX' => $ttl]);
     }
 
-    private function unlockInstance($instance, $resource, $token)
+    protected function unlockInstance(Redis $instance, string $resource, string $token)
     {
         $script = '
             if redis.call("GET", KEYS[1]) == ARGV[1] then
@@ -108,6 +122,7 @@ class RedLock
                 return 0
             end
         ';
+
         return $instance->eval($script, [$resource, $token], 1);
     }
 }

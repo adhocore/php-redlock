@@ -1,15 +1,18 @@
 {
-    "name": "ronnylt/redlock-php",
+    "name": "redlock/redlock",
     "description": "Redis distributed locks in PHP",
     "authors": [
         {
             "name": "Ronny Lopez",
             "email": "ronny@tangotree.io"
+        },
+        {
+            "name": "Jitendra Adhikari"
         }
     ],
     "require": {
-        "php": "~5.4",
-        "ext-redis": "~2.2.5"
+        "php": ">= 7.0",
+        "ext-redis": "*"
     },
 
     "autoload": {
@@ -17,6 +20,4 @@
             "RedLock\\": "src/"
         }
     }
-
-
 }
